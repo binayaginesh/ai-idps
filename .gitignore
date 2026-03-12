@@ -1,0 +1,39 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Logs (generated at runtime)
+logs/
+
+# Dataset (too large for GitHub)
+dataset/
+
+# Model artifacts (too large / can be regenerated)
+models/*.pkl
+models/*.npy
+
+# Stray files
+10.0.0.5*
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+
+# Smoke test / helper scripts
+smoke_cowrie.py
+smoke_test.sh
+check_status.py
+check_hp.py
+
+# Misc
+nohup.out
+*.log

@@ -1,0 +1,700 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AI-IDPS Real-Time Monitor</title>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap"
+    rel="stylesheet" />
+  <style>
+    *,
+    *::before,
+    *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    :root {
+      --bg: #0a0d12;
+      --surface: #111621;
+      --border: #1e2535;
+      --text: #cdd6f4;
+      --muted: #6c7086;
+      --green: #a6e3a1;
+      --green-glow: rgba(166, 227, 161, 0.15);
+      --red: #f38ba8;
+      --red-glow: rgba(243, 139, 168, 0.15);
+      --yellow: #f9e2af;
+      --blue: #89b4fa;
+      --purple: #b4befe;
+      --radius: 12px;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Inter', sans-serif;
+      min-height: 100vh;
+    }
+
+    /* ─── HEADER ─── */
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 18px 32px;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .logo {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .logo-icon {
+      font-size: 28px;
+    }
+
+    .logo-text {
+      font-size: 20px;
+      font-weight: 700;
+    }
+
+    .logo-sub {
+      font-size: 12px;
+      color: var(--muted);
+      letter-spacing: 1px;
+      text-transform: uppercase;
+    }
+
+    .status-badge {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 18px;
+      border-radius: 50px;
+      font-size: 13px;
+      font-weight: 600;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      transition: all 0.4s;
+    }
+
+    .status-badge.secure {
+      background: var(--green-glow);
+      color: var(--green);
+      border: 1px solid var(--green);
+    }
+
+    .status-badge.elevated {
+      background: rgba(249, 226, 175, 0.1);
+      color: var(--yellow);
+      border: 1px solid var(--yellow);
+    }
+
+    .status-badge.danger {
+      background: var(--red-glow);
+      color: var(--red);
+      border: 1px solid var(--red);
+      animation: pulse 1.2s infinite;
+    }
+
+    .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: currentColor;
+    }
+
+    @keyframes pulse {
+
+      0%,
+      100% {
+        opacity: 1
+      }
+
+      50% {
+        opacity: .4
+      }
+    }
+
+    .refresh-info {
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    /* ─── MAIN LAYOUT ─── */
+    main {
+      padding: 28px 32px;
+    }
+
+    /* ─── KPI CARDS ─── */
+    .kpis {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 16px;
+      margin-bottom: 28px;
+    }
+
+    .kpi-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 22px 24px;
+      position: relative;
+      overflow: hidden;
+      transition: transform 0.2s;
+    }
+
+    .kpi-card:hover {
+      transform: translateY(-2px);
+    }
+
+    .kpi-card::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 3px;
+      background: var(--accent, var(--blue));
+    }
+
+    .kpi-card.green {
+      --accent: var(--green);
+    }
+
+    .kpi-card.red {
+      --accent: var(--red);
+    }
+
+    .kpi-card.yellow {
+      --accent: var(--yellow);
+    }
+
+    .kpi-card.blue {
+      --accent: var(--blue);
+    }
+
+    .kpi-label {
+      font-size: 11px;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 1.2px;
+      margin-bottom: 10px;
+    }
+
+    .kpi-value {
+      font-size: 42px;
+      font-weight: 700;
+      font-family: 'JetBrains Mono', monospace;
+      line-height: 1;
+    }
+
+    .kpi-card.green .kpi-value {
+      color: var(--green);
+      text-shadow: 0 0 20px var(--green-glow);
+    }
+
+    .kpi-card.red .kpi-value {
+      color: var(--red);
+      text-shadow: 0 0 20px var(--red-glow);
+    }
+
+    .kpi-card.yellow .kpi-value {
+      color: var(--yellow);
+    }
+
+    .kpi-card.blue .kpi-value {
+      color: var(--blue);
+    }
+
+    .kpi-icon {
+      position: absolute;
+      right: 20px;
+      top: 50%;
+      transform: translateY(-50%);
+      font-size: 36px;
+      opacity: 0.08;
+    }
+
+    /* ─── GRID LAYOUT ─── */
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr 340px;
+      gap: 20px;
+    }
+
+    /* ─── CARDS ─── */
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 20px;
+    }
+
+    .card-title {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text);
+      margin-bottom: 16px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    /* ─── TABLE ─── */
+    .alert-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+
+    .alert-table th {
+      text-align: left;
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--muted);
+      padding: 8px 12px;
+      border-bottom: 1px solid var(--border);
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+    }
+
+    .alert-table td {
+      padding: 10px 12px;
+      border-bottom: 1px solid rgba(30, 37, 53, 0.8);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 12px;
+    }
+
+    .alert-table tr:last-child td {
+      border-bottom: none;
+    }
+
+    .alert-table tr:hover td {
+      background: rgba(255, 255, 255, 0.02);
+    }
+
+    .badge {
+      display: inline-block;
+      padding: 2px 10px;
+      border-radius: 50px;
+      font-size: 11px;
+      font-weight: 600;
+    }
+
+    .badge-attack {
+      background: var(--red-glow);
+      color: var(--red);
+      border: 1px solid var(--red);
+    }
+
+    .badge-benign {
+      background: var(--green-glow);
+      color: var(--green);
+      border: 1px solid var(--green);
+    }
+
+    .badge-honeypot {
+      background: rgba(180, 190, 254, 0.15);
+      color: var(--purple);
+      border: 1px solid var(--purple);
+    }
+
+    .no-data {
+      color: var(--muted);
+      font-size: 13px;
+      text-align: center;
+      padding: 40px 0;
+    }
+
+    /* ─── SIDE PANEL ─── */
+    .side-panel {
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+
+    /* ─── DONUT CHART ─── */
+    .donut-wrap {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .donut-svg {
+      width: 160px;
+      height: 160px;
+    }
+
+    .donut-legend {
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .legend-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 12px;
+    }
+
+    .legend-color {
+      width: 10px;
+      height: 10px;
+      border-radius: 2px;
+      margin-right: 8px;
+      display: inline-block;
+    }
+
+    .legend-label {
+      display: flex;
+      align-items: center;
+    }
+
+    /* ─── TIMELINE ─── */
+    .timeline {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      max-height: 240px;
+      overflow-y: auto;
+    }
+
+    .timeline-item {
+      display: flex;
+      gap: 10px;
+      font-size: 12px;
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    .timeline-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      margin-top: 4px;
+      flex-shrink: 0;
+    }
+
+    .timeline-dot.red {
+      background: var(--red);
+    }
+
+    .timeline-dot.green {
+      background: var(--green);
+    }
+
+    .timeline-dot.purple {
+      background: var(--purple);
+    }
+
+    .timeline-text {
+      color: var(--text);
+    }
+
+    .timeline-ts {
+      color: var(--muted);
+      font-size: 11px;
+    }
+
+    /* ─── Attack Bar Chart ─── */
+    .bar-chart {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .bar-row {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .bar-label {
+      font-size: 11px;
+      color: var(--muted);
+      display: flex;
+      justify-content: space-between;
+    }
+
+    .bar-track {
+      background: rgba(255, 255, 255, 0.05);
+      border-radius: 4px;
+      height: 8px;
+      overflow: hidden;
+    }
+
+    .bar-fill {
+      height: 100%;
+      border-radius: 4px;
+      background: var(--red);
+      transition: width 0.6s ease;
+    }
+
+    /* ─── SCROLLBAR ─── */
+    ::-webkit-scrollbar {
+      width: 4px;
+    }
+
+    ::-webkit-scrollbar-track {
+      background: transparent;
+    }
+
+    ::-webkit-scrollbar-thumb {
+      background: var(--border);
+      border-radius: 4px;
+    }
+  </style>
+</head>
+
+<body>
+
+  <header>
+    <div class="logo">
+      <span class="logo-icon">🛡️</span>
+      <div>
+        <div class="logo-text">AI-IDPS Real-Time Monitor</div>
+        <div class="logo-sub">Phase 2 — Flow-Based Detection Engine</div>
+      </div>
+    </div>
+    <div id="statusBadge" class="status-badge secure">
+      <span class="dot"></span>
+      <span id="statusText">SECURE</span>
+    </div>
+    <div class="refresh-info">Auto-refresh every <strong>3s</strong> &nbsp;|&nbsp; Last updated: <span
+        id="lastUpdated">—</span></div>
+  </header>
+
+  <main>
+    <!-- KPIs -->
+    <div class="kpis">
+      <div class="kpi-card blue">
+        <div class="kpi-label">Total Flows</div>
+        <div class="kpi-value" id="kpiTotal">0</div>
+        <div class="kpi-icon">⚡</div>
+      </div>
+      <div class="kpi-card green">
+        <div class="kpi-label">Benign Flows</div>
+        <div class="kpi-value" id="kpiBenign">0</div>
+        <div class="kpi-icon">✅</div>
+      </div>
+      <div class="kpi-card red">
+        <div class="kpi-label">Attacks Detected</div>
+        <div class="kpi-value" id="kpiAttacks">0</div>
+        <div class="kpi-icon">🚨</div>
+      </div>
+      <div class="kpi-card yellow">
+        <div class="kpi-label">Attack Rate</div>
+        <div class="kpi-value" id="kpiRate">0%</div>
+        <div class="kpi-icon">📊</div>
+      </div>
+      <div class="kpi-card" style="--accent:var(--purple)">
+        <div class="kpi-label">Honeypot Alerts</div>
+        <div class="kpi-value" id="kpiHoneypot" style="color:var(--purple)">0</div>
+        <div class="kpi-icon">🍯</div>
+      </div>
+    </div>
+
+    <!-- Content Grid -->
+    <div class="grid">
+      <!-- Left: Alert Table -->
+      <div>
+        <div class="card">
+          <div class="card-title">🚨 Recent Attack Alerts</div>
+          <div id="alertTableWrap">
+            <p class="no-data">Loading...</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Right: Side Panel -->
+      <div class="side-panel">
+        <!-- Donut Chart -->
+        <div class="card">
+          <div class="card-title">📊 Traffic Distribution</div>
+          <div class="donut-wrap">
+            <svg class="donut-svg" viewBox="0 0 36 36">
+              <circle id="donutBg" cx="18" cy="18" r="15.9" fill="none" stroke="#1e2535" stroke-width="3.5" />
+              <circle id="donutBenign" cx="18" cy="18" r="15.9" fill="none" stroke="#a6e3a1" stroke-width="3.5"
+                stroke-dasharray="0 100" stroke-dashoffset="25" stroke-linecap="round"
+                style="transition:stroke-dasharray 0.7s ease" />
+              <circle id="donutAttack" cx="18" cy="18" r="15.9" fill="none" stroke="#f38ba8" stroke-width="3.5"
+                stroke-dasharray="0 100" stroke-dashoffset="25" stroke-linecap="round"
+                style="transition:stroke-dasharray 0.7s ease" />
+              <text x="18" y="19" text-anchor="middle" fill="#cdd6f4" font-size="5" font-family="Inter"
+                font-weight="700" id="donutLabel">0%</text>
+              <text x="18" y="23.5" text-anchor="middle" fill="#6c7086" font-size="3" font-family="Inter">safe</text>
+            </svg>
+            <div class="donut-legend">
+              <div class="legend-row">
+                <div class="legend-label"><span class="legend-color" style="background:#a6e3a1"></span>Benign</div>
+                <span id="legendBenign" style="color:#a6e3a1;font-weight:600">0</span>
+              </div>
+              <div class="legend-row">
+                <div class="legend-label"><span class="legend-color" style="background:#f38ba8"></span>Attack</div>
+                <span id="legendAttack" style="color:#f38ba8;font-weight:600">0</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Attack Type Breakdown -->
+        <div class="card">
+          <div class="card-title">🔬 Attack Classifications</div>
+          <div class="bar-chart" id="attackClasses">
+            <p class="no-data" style="font-size:12px">No attacks yet.</p>
+          </div>
+        </div>
+
+        <!-- Activity Timeline -->
+        <div class="card">
+          <div class="card-title">🕐 Activity Feed</div>
+          <div class="timeline" id="timeline">
+            <p class="no-data" style="font-size:12px">Awaiting events...</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <script>
+    const API = 'http://localhost:8765/api/stats';
+
+    function updateStatus(attacks, total) {
+      const badge = document.getElementById('statusBadge');
+      const text = document.getElementById('statusText');
+      badge.className = 'status-badge';
+      if (attacks === 0) {
+        badge.classList.add('secure');
+        text.textContent = 'SECURE';
+      } else if (attacks / Math.max(total, 1) < 0.1) {
+        badge.classList.add('elevated');
+        text.textContent = 'ELEVATED';
+      } else {
+        badge.classList.add('danger');
+        text.textContent = 'UNDER ATTACK';
+      }
+    }
+
+    function updateDonut(benign, attacks) {
+      const total = benign + attacks;
+      const benignPct = total ? (benign / total) * 100 : 0;
+      const attackPct = total ? (attacks / total) * 100 : 0;
+      document.getElementById('donutBenign').setAttribute('stroke-dasharray', `${benignPct} ${100 - benignPct}`);
+      document.getElementById('donutBenign').setAttribute('stroke-dashoffset', '25');
+      const attackOffset = 25 - benignPct;
+      document.getElementById('donutAttack').setAttribute('stroke-dasharray', `${attackPct} ${100 - attackPct}`);
+      document.getElementById('donutAttack').setAttribute('stroke-dashoffset', attackOffset);
+      document.getElementById('donutLabel').textContent = `${Math.round(benignPct)}%`;
+      document.getElementById('legendBenign').textContent = benign;
+      document.getElementById('legendAttack').textContent = attacks;
+    }
+
+    function renderTable(alerts) {
+      const wrap = document.getElementById('alertTableWrap');
+      if (!alerts || alerts.length === 0) {
+        wrap.innerHTML = '<p class="no-data">No attacks detected. System is clean. ✅</p>';
+        return;
+      }
+      let rows = alerts.slice(0, 50).map(a => {
+        const isHoneypot = a.dst === 'Honeypot';
+        const badgeClass = isHoneypot ? 'badge-honeypot' : 'badge-attack';
+        const icon = isHoneypot ? '🍯 ' : '';
+        return `
+      <tr>
+        <td style="color:var(--muted)">${a.timestamp}</td>
+        <td>${a.src}</td>
+        <td>${a.dst}</td>
+        <td><span class="badge ${badgeClass}">${icon}${a.classification}</span></td>
+        <td style="color:var(--red);font-weight:600">${a.confidence}</td>
+      </tr>`;
+      }).join('');
+      wrap.innerHTML = `
+      <table class="alert-table">
+        <thead><tr>
+          <th>Timestamp</th><th>Source</th><th>Destination</th><th>Class</th><th>Confidence</th>
+        </tr></thead>
+        <tbody>${rows}</tbody>
+      </table>`;
+    }
+
+    function renderClassChart(classes) {
+      const el = document.getElementById('attackClasses');
+      if (!classes || Object.keys(classes).length === 0) {
+        el.innerHTML = '<p class="no-data" style="font-size:12px">No attacks yet.</p>';
+        return;
+      }
+      const max = Math.max(...Object.values(classes));
+      el.innerHTML = Object.entries(classes)
+        .sort((a, b) => b[1] - a[1])
+        .map(([cls, count]) => `
+        <div class="bar-row">
+          <div class="bar-label"><span>${cls}</span><span style="color:var(--red)">${count}</span></div>
+          <div class="bar-track"><div class="bar-fill" style="width:${(count / max * 100).toFixed(1)}%"></div></div>
+        </div>`).join('');
+    }
+
+    function renderTimeline(recent) {
+      const el = document.getElementById('timeline');
+      if (!recent || recent.length === 0) {
+        el.innerHTML = '<p class="no-data" style="font-size:12px">Awaiting events...</p>';
+        return;
+      }
+      el.innerHTML = recent.slice(0, 20).map(e => {
+        const isHoneypot = e.dst === 'Honeypot';
+        const dotColor = e.type === 'attack' ? (isHoneypot ? 'purple' : 'red') : 'green';
+        const icon = isHoneypot ? '🍯' : (e.type === 'attack' ? '🚨' : '✅');
+        return `
+      <div class="timeline-item">
+        <div class="timeline-dot ${dotColor}"></div>
+        <div>
+          <div class="timeline-text">${icon} ${e.src} → ${e.dst} ${e.type === 'attack' ? `[${e.classification}]` : ''}</div>
+          <div class="timeline-ts">${e.timestamp}</div>
+        </div>
+      </div>`;
+      }).join('');
+    }
+
+    async function refresh() {
+      try {
+        const res = await fetch(API);
+        if (!res.ok) throw new Error('API error');
+        const data = await res.json();
+
+        const total = (data.benign_count || 0) + (data.attack_count || 0);
+        const hpCount = (data.honeypot_events || []).length;
+        const rate = total ? ((data.attack_count / total) * 100).toFixed(1) : '0.0';
+
+        document.getElementById('kpiTotal').textContent = total;
+        document.getElementById('kpiBenign').textContent = data.benign_count || 0;
+        document.getElementById('kpiAttacks').textContent = data.attack_count || 0;
+        document.getElementById('kpiRate').textContent = rate + '%';
+        document.getElementById('kpiHoneypot').textContent = hpCount;
+        document.getElementById('lastUpdated').textContent = new Date().toLocaleTimeString();
+
+        updateStatus(data.attack_count || 0, total);
+        updateDonut(data.benign_count || 0, data.attack_count || 0);
+        renderTable(data.attacks || []);
+        renderClassChart(data.attack_classes || {});
+        renderTimeline(data.recent_events || []);
+
+      } catch (err) {
+        document.getElementById('lastUpdated').textContent = 'Server offline';
+      }
+    }
+
+    refresh();
+    setInterval(refresh, 3000);
+  </script>
+</body>
+
+</html>
