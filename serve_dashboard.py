@@ -53,6 +53,52 @@ _honeypot_lock   = threading.Lock()
 _honeypot_events = collections.deque(maxlen=200)   # newest-first ring buffer
 
 # ---------------------------------------------------------------------------
+# Blocked IPs store + dedup window
+# ---------------------------------------------------------------------------
+_blocked_lock   = threading.Lock()
+_blocked_ips    = []       # list of {ip, attack_type, timestamp}
+_blocked_set    = set()    # fast O(1) duplicate check
+_recent_attacks = {}       # ip → timestamp  (dedup within 60s window)
+_DEDUP_WINDOW   = 60       # seconds — suppress duplicate events for same IP
+
+
+def _should_accept_attack(ip: str, timestamp: str) -> bool:
+    """Return True if this attack should be recorded (dedup check)."""
+    import time as _time
+    now = _time.time()
+    with _blocked_lock:
+        last_ts = _recent_attacks.get(ip)
+        if last_ts and (now - last_ts) < _DEDUP_WINDOW:
+            _logger.info("Suppressing duplicate attack from %s (within %ds window)", ip, _DEDUP_WINDOW)
+            return False
+        _recent_attacks[ip] = now
+    return True
+
+
+def _register_attack(ip: str, attack_type: str, timestamp: str) -> str:
+    """Register an attack and return status: 'NEW' or 'BLOCKED'.
+    First attack from an IP → status='NEW' + add to blocked list.
+    Repeat attack from already-blocked IP → status='BLOCKED'."""
+    with _blocked_lock:
+        if ip in _blocked_set:
+            _logger.info("IP %s already blocked — repeat attack → BLOCKED", ip)
+            return "BLOCKED"
+        _blocked_set.add(ip)
+        _blocked_ips.append({
+            "ip":          ip,
+            "attack_type": attack_type,
+            "timestamp":   timestamp,
+        })
+    _logger.warning("NEW ATTACK from %s (attack=%s) — added to blocked list", ip, attack_type)
+    return "NEW"
+
+
+def _get_server_blocked_ips() -> list[dict]:
+    """Thread-safe snapshot of server-local blocked IPs."""
+    with _blocked_lock:
+        return list(_blocked_ips)
+
+# ---------------------------------------------------------------------------
 # Log parsers
 # ---------------------------------------------------------------------------
 _RE_ATTACK = re.compile(
@@ -131,6 +177,7 @@ def build_stats() -> dict:
             "dst":            "Honeypot",
             "classification": cls,
             "confidence":     conf_str,
+            "status":         hp.get("status", "NEW"),
         }
         attacks.append(entry)
         attack_classes[cls] = attack_classes.get(cls, 0) + 1
@@ -148,6 +195,7 @@ def build_stats() -> dict:
         "attack_classes": attack_classes,
         "recent_events":  recent_events,
         "honeypot_events": hp_snapshot,
+        "blocked_ips":    _get_server_blocked_ips(),
     }
 
 
@@ -211,12 +259,25 @@ class DashboardHandler(BaseHTTPRequestHandler):
                     if not isinstance(event["confidence"], (int, float)):
                         raise ValueError("confidence must be numeric")
 
+                    # Dedup: suppress duplicate events from same IP within 60s
+                    if not _should_accept_attack(event["source_ip"],
+                                                  event.get("timestamp", "")):
+                        self._set_headers("application/json", 200)
+                        self.wfile.write(json.dumps({"status": "suppressed"}).encode())
+                        return
+
+                    # Determine status: NEW (first time) or BLOCKED (repeat)
+                    event["status"] = _register_attack(
+                        event["source_ip"], event["attack_type"],
+                        event.get("timestamp", ""))
+
                     with _honeypot_lock:
                         _honeypot_events.appendleft(event)  # newest first
 
                     _logger.info(
-                        "HONEYPOT ATTACK received: %s from %s (conf=%.2f)",
-                        event["attack_type"], event["source_ip"], event["confidence"],
+                        "HONEYPOT ATTACK received: %s from %s (conf=%.2f) status=%s",
+                        event["attack_type"], event["source_ip"],
+                        event["confidence"], event["status"],
                     )
 
                     self._set_headers("application/json", 200)

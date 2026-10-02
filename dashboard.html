@@ -136,7 +136,7 @@
     /* ─── KPI CARDS ─── */
     .kpis {
       display: grid;
-      grid-template-columns: repeat(5, 1fr);
+      grid-template-columns: repeat(6, 1fr);
       gap: 16px;
       margin-bottom: 28px;
     }
@@ -305,6 +305,68 @@
       background: rgba(180, 190, 254, 0.15);
       color: var(--purple);
       border: 1px solid var(--purple);
+    }
+
+    .badge-blocked {
+      background: rgba(250, 179, 135, 0.15);
+      color: #fab387;
+      border: 1px solid #fab387;
+    }
+
+    .badge-detected {
+      background: rgba(243, 139, 168, 0.2);
+      color: #f38ba8;
+      border: 1px solid #f38ba8;
+      animation: pulse-detected 1s ease-in-out infinite;
+    }
+
+    @keyframes pulse-detected {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
+
+    /* ─── TOAST POPUP ─── */
+    #toastContainer {
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      z-index: 9999;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      pointer-events: none;
+    }
+    .toast {
+      pointer-events: auto;
+      background: linear-gradient(135deg, rgba(243,139,168,0.95), rgba(250,179,135,0.9));
+      color: #1e1e2e;
+      padding: 16px 22px;
+      border-radius: 12px;
+      font-size: 14px;
+      font-weight: 600;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+      animation: toastSlideIn 0.4s ease-out;
+      max-width: 360px;
+      line-height: 1.5;
+    }
+    .toast.fade-out {
+      animation: toastFadeOut 0.5s ease-in forwards;
+    }
+    .toast .toast-title {
+      font-size: 16px;
+      margin-bottom: 4px;
+    }
+    .toast .toast-detail {
+      font-size: 13px;
+      opacity: 0.85;
+    }
+    @keyframes toastSlideIn {
+      from { transform: translateX(120%); opacity: 0; }
+      to   { transform: translateX(0); opacity: 1; }
+    }
+    @keyframes toastFadeOut {
+      from { opacity: 1; transform: translateY(0); }
+      to   { opacity: 0; transform: translateY(-20px); }
     }
 
     .no-data {
@@ -502,6 +564,11 @@
         <div class="kpi-value" id="kpiHoneypot" style="color:var(--purple)">0</div>
         <div class="kpi-icon">🍯</div>
       </div>
+      <div class="kpi-card" style="--accent:#fab387">
+        <div class="kpi-label">IPs Blocked</div>
+        <div class="kpi-value" id="kpiBlocked" style="color:#fab387">0</div>
+        <div class="kpi-icon">🚫</div>
+      </div>
     </div>
 
     <!-- Content Grid -->
@@ -564,6 +631,16 @@
         </div>
       </div>
     </div>
+
+    <!-- Blocked Attackers Section -->
+    <div style="margin-top:20px; padding: 0 32px 28px">
+      <div class="card">
+        <div class="card-title">🚫 Blocked Attackers</div>
+        <div id="blockedTableWrap">
+          <p class="no-data">No IPs blocked yet. System monitoring active.</p>
+        </div>
+      </div>
+    </div>
   </main>
 
   <script>
@@ -609,6 +686,12 @@
         const isHoneypot = a.dst === 'Honeypot';
         const badgeClass = isHoneypot ? 'badge-honeypot' : 'badge-attack';
         const icon = isHoneypot ? '🍯 ' : '';
+        const status = a.status || '';
+        const statusBadge = status === 'BLOCKED'
+          ? '<span class="badge badge-blocked">🚫 BLOCKED</span>'
+          : status === 'NEW'
+            ? '<span class="badge" style="background:rgba(166,227,161,0.15);color:#a6e3a1;border:1px solid #a6e3a1">🆕 NEW</span>'
+            : '';
         return `
       <tr>
         <td style="color:var(--muted)">${a.timestamp}</td>
@@ -616,12 +699,13 @@
         <td>${a.dst}</td>
         <td><span class="badge ${badgeClass}">${icon}${a.classification}</span></td>
         <td style="color:var(--red);font-weight:600">${a.confidence}</td>
+        <td>${statusBadge}</td>
       </tr>`;
       }).join('');
       wrap.innerHTML = `
       <table class="alert-table">
         <thead><tr>
-          <th>Timestamp</th><th>Source</th><th>Destination</th><th>Class</th><th>Confidence</th>
+          <th>Timestamp</th><th>Source</th><th>Destination</th><th>Class</th><th>Confidence</th><th>Status</th>
         </tr></thead>
         <tbody>${rows}</tbody>
       </table>`;
@@ -664,6 +748,84 @@
       }).join('');
     }
 
+    function renderBlockedIPs(blocked) {
+      const wrap = document.getElementById('blockedTableWrap');
+      if (!blocked || blocked.length === 0) {
+        wrap.innerHTML = '<p class="no-data">No IPs blocked yet. System monitoring active.</p>';
+        return;
+      }
+      const rows = blocked.map(b => `
+        <tr>
+          <td><span class="badge badge-blocked">🚫 ${b.ip}</span></td>
+          <td>${b.attack_type}</td>
+          <td style="color:var(--muted)">${b.timestamp}</td>
+        </tr>`).join('');
+      wrap.innerHTML = `
+        <table class="alert-table">
+          <thead><tr>
+            <th>IP Address</th><th>Attack Type</th><th>Time Blocked</th>
+          </tr></thead>
+          <tbody>${rows}</tbody>
+        </table>`;
+    }
+
+    // ── Alert Sound (Web Audio API) ──────────────────────────────
+    let audioCtx = null;
+    const seenAttackKeys = new Set();  // track attacks we've already seen
+    let isFirstLoad = true;
+
+    function initAudio() {
+      if (!audioCtx) {
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      }
+    }
+
+    function playAlertSound() {
+      if (!audioCtx) return;
+      try {
+        const now = audioCtx.currentTime;
+        // Three-tone urgent alert: rising then falling (660→880→440 Hz)
+        [660, 880, 440].forEach((freq, i) => {
+          const osc = audioCtx.createOscillator();
+          const gain = audioCtx.createGain();
+          osc.type = 'sawtooth';
+          osc.frequency.value = freq;
+          gain.gain.setValueAtTime(0.35, now + i * 0.18);
+          gain.gain.exponentialRampToValueAtTime(0.01, now + i * 0.18 + 0.16);
+          osc.connect(gain);
+          gain.connect(audioCtx.destination);
+          osc.start(now + i * 0.18);
+          osc.stop(now + i * 0.18 + 0.18);
+        });
+      } catch (e) { /* ignore audio errors */ }
+    }
+
+    // Enable audio on first user interaction (browser autoplay policy)
+    document.addEventListener('click', initAudio, { once: true });
+
+    // ── Toast Popup ──────────────────────────────────────────────
+    function showAttackPopup(srcIp, attackType, status) {
+      const container = document.getElementById('toastContainer');
+      const toast = document.createElement('div');
+      toast.className = 'toast';
+      const emoji = status === 'BLOCKED' ? '🚫' : '⚠️';
+      const label = status === 'BLOCKED' ? 'Repeat Attack (IP Already Blocked)' : 'New Attack Detected';
+      toast.innerHTML = `
+        <div class="toast-title">${emoji} ${label}</div>
+        <div class="toast-detail">
+          Source IP: <strong>${srcIp}</strong><br>
+          Attack: <strong>${attackType}</strong><br>
+          Status: <strong>${status}</strong>
+        </div>`;
+      container.appendChild(toast);
+      // Auto-dismiss after 6 seconds
+      setTimeout(() => {
+        toast.classList.add('fade-out');
+        setTimeout(() => toast.remove(), 500);
+      }, 6000);
+    }
+
+    // ── Main Refresh Loop ────────────────────────────────────────
     async function refresh() {
       try {
         const res = await fetch(API);
@@ -672,20 +834,39 @@
 
         const total = (data.benign_count || 0) + (data.attack_count || 0);
         const hpCount = (data.honeypot_events || []).length;
+        const blockedCount = (data.blocked_ips || []).length;
         const rate = total ? ((data.attack_count / total) * 100).toFixed(1) : '0.0';
+        const currentAttacks = data.attack_count || 0;
+
+        // Detect genuinely new attacks (by unique key: src+timestamp+status)
+        const honeypotAttacks = (data.attacks || []).filter(a => a.dst === 'Honeypot');
+        honeypotAttacks.forEach(a => {
+          const key = `${a.src}|${a.timestamp}|${a.status}`;
+          if (!seenAttackKeys.has(key)) {
+            seenAttackKeys.add(key);
+            if (!isFirstLoad) {
+              // Sound + popup only for NEW attacks (not on page load)
+              playAlertSound();
+              showAttackPopup(a.src, a.classification, a.status || 'NEW');
+            }
+          }
+        });
+        isFirstLoad = false;
 
         document.getElementById('kpiTotal').textContent = total;
         document.getElementById('kpiBenign').textContent = data.benign_count || 0;
-        document.getElementById('kpiAttacks').textContent = data.attack_count || 0;
+        document.getElementById('kpiAttacks').textContent = currentAttacks;
         document.getElementById('kpiRate').textContent = rate + '%';
         document.getElementById('kpiHoneypot').textContent = hpCount;
+        document.getElementById('kpiBlocked').textContent = blockedCount;
         document.getElementById('lastUpdated').textContent = new Date().toLocaleTimeString();
 
-        updateStatus(data.attack_count || 0, total);
-        updateDonut(data.benign_count || 0, data.attack_count || 0);
+        updateStatus(currentAttacks, total);
+        updateDonut(data.benign_count || 0, currentAttacks);
         renderTable(data.attacks || []);
         renderClassChart(data.attack_classes || {});
         renderTimeline(data.recent_events || []);
+        renderBlockedIPs(data.blocked_ips || []);
 
       } catch (err) {
         document.getElementById('lastUpdated').textContent = 'Server offline';
@@ -695,6 +876,9 @@
     refresh();
     setInterval(refresh, 3000);
   </script>
-</body>
 
+  <!-- Toast popup container -->
+  <div id="toastContainer"></div>
+
+</body>
 </html>

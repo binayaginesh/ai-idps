@@ -24,6 +24,7 @@ import json
 import logging
 import os
 import sys
+import threading
 import time
 import urllib.error
 import urllib.request
@@ -32,6 +33,14 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Deque, Dict, Optional
+
+# Import prevention module (same package)
+try:
+    from prevention import block_ip
+except ImportError:
+    import sys
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    from prevention import block_ip
 
 
 # ---------------------------------------------------------------------------
@@ -241,13 +250,16 @@ class DashboardReporter:
         self._max_retries = max_retries
         self._logger      = logging.getLogger("cowrie_monitor.reporter")
 
-    def send(self, result: ClassificationResult) -> bool:
+    def send(self, result: ClassificationResult, status: str = "") -> bool:
         """
         Send a classification result to the dashboard.
         Retries up to max_retries times with 1s backoff.
         Returns True on success, False on failure (non-fatal).
         """
-        payload = json.dumps(result.to_dict()).encode("utf-8")
+        data = result.to_dict()
+        if status:
+            data["status"] = status
+        payload = json.dumps(data).encode("utf-8")
         req = urllib.request.Request(
             self._url,
             data    = payload,
@@ -442,7 +454,28 @@ class CowrieMonitor:
                 "ATTACK CLASSIFIED  type=%s src=%s conf=%.2f",
                 result.attack_type, result.source_ip, result.confidence,
             )
+
+            # Send ONE event to dashboard (server determines NEW/BLOCKED status)
             self._reporter.send(result)
+            self._logger.warning(
+                "ATTACK REPORTED to dashboard for %s", result.source_ip,
+            )
+
+            # Schedule iptables block after 60s delay (dashboard stays visible)
+            def _delayed_block(r=result):
+                self._logger.info(
+                    "Waiting 60s before blocking %s (keeping dashboard live)...",
+                    r.source_ip,
+                )
+                time.sleep(60)
+                self._logger.warning(
+                    "PREVENTION TRIGGERED for IP %s", r.source_ip,
+                )
+                block_ip(r.source_ip, r.attack_type)
+
+            threading.Thread(
+                target=_delayed_block, daemon=True, name="block-" + result.source_ip,
+            ).start()
 
     # ── main loop ───────────────────────────────────────────────────────────
 
